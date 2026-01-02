@@ -35,23 +35,33 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Obter pathname atual
+  const pathname = request.nextUrl.pathname
+
+  // Tratar rota raiz "/" - permitir acesso (já redireciona para /dashboard no page.tsx)
+  if (pathname === '/') {
+    return supabaseResponse
+  }
+
   // Definir rotas públicas (que não precisam de autenticação)
   const publicPaths = ['/login', '/register', '/auth/callback']
-  const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
+  const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
 
   // Se não estiver autenticado e tentar acessar rota protegida, redirecionar para login
+  // IMPORTANTE: Fazer redirect ANTES de processar cookies do Supabase
   if (!user && !isPublicPath) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('redirectedFrom', request.nextUrl.pathname)
-    return NextResponse.redirect(url)
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirectedFrom', pathname)
+    // Retornar redirect imediatamente - o Supabase gerencia cookies internamente
+    return NextResponse.redirect(loginUrl)
   }
 
   // Se estiver autenticado e tentar acessar login ou register, redirecionar para dashboard
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+  // IMPORTANTE: Fazer redirect ANTES de processar cookies do Supabase
+  if (user && (pathname === '/login' || pathname === '/register')) {
+    const dashboardUrl = new URL('/dashboard', request.url)
+    // Retornar redirect imediatamente - o Supabase gerencia cookies internamente
+    return NextResponse.redirect(dashboardUrl)
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're

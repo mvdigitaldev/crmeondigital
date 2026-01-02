@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import Link from 'next/link'
 
 export default function LoginPage() {
   const { signIn, isSigningIn } = useAuth()
@@ -71,12 +70,6 @@ export default function LoginPage() {
               Entrar
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            Não tem uma conta?{' '}
-            <Link href="/register" className="text-primary hover:underline">
-              Criar conta
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>

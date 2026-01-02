@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useLeads } from '@/hooks/useLeads'
+import { usePipelineStages } from '@/hooks/usePipelineStages'
 import { MetricsCard } from '@/components/dashboard/MetricsCard'
 import { Users, Phone, TrendingUp, DollarSign } from 'lucide-react'
 import { useMemo } from 'react'
@@ -33,6 +34,7 @@ const orangeShades = [
 
 export default function DashboardPage() {
   const { data: leads = [], isLoading } = useLeads()
+  const { data: stages = [], isLoading: isLoadingStages } = usePipelineStages()
 
   const metrics = useMemo(() => {
     const totalLeads = leads.length
@@ -41,32 +43,68 @@ export default function DashboardPage() {
       return acc
     }, {} as Record<string, number>)
 
+    // Identificar etapas finais (fechado/perdido) dinamicamente
+    const finalStages = stages.filter(stage => 
+      stage.slug.toLowerCase().includes('fechado') || 
+      stage.slug.toLowerCase().includes('perdido')
+    ).map(stage => stage.slug)
+
     const valorPotencial = leads
-      .filter((lead) => lead.status !== 'fechado' && lead.status !== 'perdido')
+      .filter((lead) => !finalStages.includes(lead.status))
       .reduce((sum, lead) => sum + (lead.valor_estimado || 0), 0)
 
+    // Calcular conversão baseado em etapas "fechado"
+    const fechadoStage = stages.find(s => s.slug.toLowerCase().includes('fechado'))
+    const leadsFechados = fechadoStage ? (leadsByStatus[fechadoStage.slug] || 0) : 0
     const conversao = totalLeads > 0
-      ? ((leadsByStatus['fechado'] || 0) / totalLeads) * 100
+      ? (leadsFechados / totalLeads) * 100
       : 0
+
+    // Encontrar etapa de negociação dinamicamente
+    const negociacaoStage = stages.find(s => 
+      s.slug.toLowerCase().includes('negociacao') || 
+      s.slug.toLowerCase().includes('negociação')
+    )
 
     return {
       totalLeads,
       leadsByStatus,
       valorPotencial,
       conversao,
+      negociacaoCount: negociacaoStage ? (leadsByStatus[negociacaoStage.slug] || 0) : 0,
+      finalStages,
     }
-  }, [leads])
+  }, [leads, stages])
 
-  const chartData = [
-    { name: 'Prospecção', value: metrics.leadsByStatus['prospecção'] || 0, color: PRIMARY_ORANGE },
-    { name: 'Contato Realizado', value: metrics.leadsByStatus['contato_realizado'] || 0, color: orangeShades[1] },
-    { name: 'Reunião Agendada', value: metrics.leadsByStatus['reuniao_agendada'] || 0, color: orangeShades[2] },
-    { name: 'Negociação', value: metrics.leadsByStatus['negociacao'] || 0, color: orangeShades[3] },
-    { name: 'Fechado', value: metrics.leadsByStatus['fechado'] || 0, color: orangeShades[4] },
-    { name: 'Perdido', value: metrics.leadsByStatus['perdido'] || 0, color: '#ef4444' }, // Vermelho para perdido
-  ]
+  // Gerar dados do gráfico baseado nas etapas do pipeline
+  const chartData = useMemo(() => {
+    // Ordenar etapas por ordem
+    const sortedStages = [...stages].sort((a, b) => a.order - b.order)
+    
+    return sortedStages.map((stage, index) => {
+      const count = metrics.leadsByStatus[stage.slug] || 0
+      // Identificar cor baseado no tipo de etapa
+      let color = PRIMARY_ORANGE
+      const slugLower = stage.slug.toLowerCase()
+      
+      if (slugLower.includes('perdido')) {
+        color = '#ef4444' // Vermelho para perdido
+      } else if (slugLower.includes('fechado')) {
+        color = '#22c55e' // Verde para fechado
+      } else {
+        // Usar tons de laranja para outras etapas
+        color = orangeShades[index % orangeShades.length] || PRIMARY_ORANGE
+      }
 
-  if (isLoading) {
+      return {
+        name: stage.name,
+        value: count,
+        color: stage.color || color,
+      }
+    })
+  }, [stages, metrics.leadsByStatus])
+
+  if (isLoading || isLoadingStages) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
@@ -103,7 +141,7 @@ export default function DashboardPage() {
         />
         <MetricsCard
           title="Em Negociação"
-          value={metrics.leadsByStatus['negociacao'] || 0}
+          value={metrics.negociacaoCount}
           icon={Phone}
           description="Leads em negociação"
         />
@@ -147,10 +185,13 @@ export default function DashboardPage() {
                 <Legend />
                 <Bar 
                   dataKey="value" 
-                  fill={PRIMARY_ORANGE}
                   radius={[4, 4, 0, 0]}
                   name="Quantidade"
-                />
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
               </BarChart>
             </ChartContainer>
           </CardContent>
